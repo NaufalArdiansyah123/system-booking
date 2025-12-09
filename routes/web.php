@@ -23,6 +23,7 @@ Route::get('/booking/preview/{slot}', [BookingController::class, 'preview'])->na
 
 // API for booking creation with payment
 Route::post('/api/bookings/create', [BookingController::class, 'createBooking'])->name('api.bookings.create');
+Route::post('/api/bookings/{booking}/confirm-payment', [BookingController::class, 'confirmPayment'])->name('api.bookings.confirm');
 
 // ============================================
 // AUTHENTICATION ROUTES

@@ -628,8 +628,8 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
-                            <h3 class="text-xl font-bold text-gray-900">Pembayaran Berhasil</h3>
-                            <p class="text-sm text-gray-600 mt-2">Terima kasih! Pembayaran Anda telah diterima.</p>
+                            <h3 class="text-xl font-bold text-gray-900" x-text="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending')) ? 'Pembayaran Menunggu' : 'Pembayaran Berhasil'"></h3>
+                            <p class="text-sm text-gray-600 mt-2" x-text="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending')) ? 'Pembayaran Anda sedang menunggu konfirmasi. Ikuti instruksi pembayaran yang diberikan.' : 'Terima kasih! Pembayaran Anda telah diterima.'"></p>
 
                             <div class="mt-4 p-4 bg-gray-50 rounded-lg text-left">
                                 <div class="text-xs text-gray-500">Order ID</div>
@@ -641,7 +641,8 @@
 
                             <div class="mt-6 flex gap-3">
                                 <button @click="successModalOpen = false; window.location = '/'" class="flex-1 px-4 py-2 rounded-lg border">Tutup</button>
-                                <button @click="successModalOpen = false; window.location = '/booking/success/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white">Lihat Booking</button>
+                                <button x-show="!(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending'))" @click="successModalOpen = false; window.location = '/booking/success/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white">Lihat Booking</button>
+                                <button x-show="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending'))" @click="successModalOpen = false; window.location = '/booking/pending/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-yellow-500 text-white">Lihat Instruksi</button>
                             </div>
                         </div>
                     </div>
@@ -899,26 +900,85 @@
                                 // Process with Midtrans Snap for all payment methods
                                 const self = this;
                                 window.snap.pay(result.snap_token, {
-                                    onSuccess: function(res) {
-                                        // Show success modal instead of redirect
-                                        self.paymentModalOpen = false;
-                                        self.successInfo = {
-                                            order_id: res.order_id || res.transaction_id || result.order_id || result.booking_id,
-                                            amount: self.calculateTotal(),
-                                            raw: res
-                                        };
-                                        self.successModalOpen = true;
+                                    onSuccess: async (res) => {
+                                        try {
+                                            console.log('Snap onSuccess callback', res);
+
+                                            // Try confirm payment on backend using booking_id returned from createBooking
+                                            const bookingId = result.booking_id || (res.order_id ? res.order_id.replace(/[^0-9]/g, '') : null);
+                                            if (bookingId) {
+                                                try {
+                                                    const notifyRes = await fetch('/api/bookings/' + bookingId + '/confirm-payment', {
+                                                        method: 'POST',
+                                                        headers: {
+                                                            'Content-Type': 'application/json',
+                                                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                                                        },
+                                                        body: JSON.stringify({
+                                                            transaction_id: res.transaction_id || res.transaction_id || null,
+                                                            raw: res
+                                                        })
+                                                    });
+                                                    const notifyData = await notifyRes.json();
+                                                    console.log('Backend confirm payment response', notifyData);
+                                                } catch (notifyErr) {
+                                                    console.error('Failed to notify backend about payment success', notifyErr);
+                                                }
+                                            }
+
+                                            // Show modal using self reference
+                                            console.log('About to show success modal');
+                                            self.paymentModalOpen = false;
+                                            self.successInfo = {
+                                                order_id: res.order_id || res.transaction_id || result.order_id || result.booking_id,
+                                                amount: self.calculateTotal(),
+                                                raw: res,
+                                                status: 'success'
+                                            };
+                                            self.successModalOpen = true;
+                                            console.log('Success modal opened:', self.successModalOpen);
+                                        } catch (e) {
+                                            console.error('Failed to handle onSuccess:', e);
+                                        }
                                     },
-                                    onPending: function(res) {
-                                        // Show pending page or modal - keep redirect for now
-                                        window.location = '/booking/pending/' + (res.order_id || result.order_id || result.booking_id);
+                                    onPending: (res) => {
+                                        // Open modal in pending state instead of redirecting
+                                        try {
+                                            console.log('Snap onPending callback', res);
+                                            self.paymentModalOpen = false;
+                                            self.successInfo = {
+                                                order_id: res.order_id || result.order_id || result.booking_id,
+                                                amount: self.calculateTotal(),
+                                                raw: res,
+                                                status: 'pending'
+                                            };
+                                            self.successModalOpen = true;
+                                        } catch (e) {
+                                            console.error('Failed to open pending modal via self:', e);
+                                            try {
+                                                const root = document.querySelector('[x-data]');
+                                                if (root && root.__x) {
+                                                    root.__x.$data.successInfo = {
+                                                        order_id: res.order_id || result.order_id || result.booking_id,
+                                                        amount: (root.__x.$data && root.__x.$data.calculateTotal) ? root.__x.$data.calculateTotal() : 0,
+                                                        raw: res,
+                                                        status: 'pending'
+                                                    };
+                                                    root.__x.$data.successModalOpen = true;
+                                                }
+                                            } catch (e2) {
+                                                console.error('Failed to open pending modal via DOM fallback:', e2);
+                                            }
+                                        }
                                     },
-                                    onError: function(res) {
+                                    onError: (res) => {
                                         alert('Pembayaran gagal. Silakan coba lagi.');
                                         console.error(res);
+                                        self.paymentLoading = false;
                                     },
-                                    onClose: function() {
+                                    onClose: () => {
                                         console.log('Payment popup closed');
+                                        self.paymentLoading = false;
                                     }
                                 });
                             } else if (result.use_manual_payment) {

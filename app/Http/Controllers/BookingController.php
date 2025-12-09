@@ -295,6 +295,50 @@ class BookingController extends Controller
     }
 
     /**
+     * Confirm payment called from frontend after Midtrans onSuccess
+     */
+    public function confirmPayment(Request $request, Booking $booking)
+    {
+        $request->validate([
+            'transaction_id' => 'nullable|string',
+            'raw' => 'nullable',
+        ]);
+
+        try {
+            // update payment record
+            $payment = $booking->payment;
+            if (!$payment) {
+                // create fallback payment record
+                $method = $request->input('method') ?? 'e-wallet';
+                $payment = Payment::create([
+                    'booking_id' => $booking->id,
+                    'amount' => $booking->service ? $booking->service->price : 0,
+                    'method' => $method,
+                    'status' => 'pending',
+                ]);
+            }
+
+            $transactionId = $request->input('transaction_id') ?? null;
+            $raw = $request->input('raw') ? json_encode($request->input('raw')) : null;
+
+            $payment->transaction_id = $transactionId;
+            $payment->status = 'success';
+            $payment->paid_at = now();
+            $payment->save();
+
+            // update booking
+            $booking->status = 'confirmed';
+            $booking->payment_status = 'paid';
+            $booking->save();
+
+            return response()->json(['success' => true, 'message' => 'Payment confirmed', 'booking_id' => $booking->id]);
+        } catch (\Exception $e) {
+            Log::error('Confirm payment failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to confirm payment'], 500);
+        }
+    }
+
+    /**
      * Generate Midtrans Snap Token
      */
     private function generateMidtransToken(Booking $booking, Payment $payment, $paymentMethod)
