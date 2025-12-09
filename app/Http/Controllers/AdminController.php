@@ -20,14 +20,14 @@ class AdminController extends Controller
             'total_bookings' => Booking::count(),
             'pending_bookings' => Booking::where('status', 'pending')->count(),
             'confirmed_bookings' => Booking::where('status', 'confirmed')->count(),
+            'completed_bookings' => Booking::where('status', 'completed')->count(),
             'total_revenue' => Payment::where('status', 'success')->sum('amount'),
             'today_bookings' => Booking::whereDate('created_at', today())->count(),
         ];
 
-        $recentBookings = Booking::with(['user', 'service', 'slot'])
+        $recentBookings = Booking::with(['user', 'service', 'slot', 'payment'])
             ->latest()
-            ->take(10)
-            ->get();
+            ->paginate(10);
 
         return view('admin.dashboard', compact('stats', 'recentBookings'));
     }

@@ -42,7 +42,7 @@
                             </a>
                         @else
                             <a href="{{ route('dashboard') }}" class="text-gray-700 hover:text-green-600 transition">
-                                Dashboard
+                                Booking Saya
                             </a>
                         @endif
                     @endauth

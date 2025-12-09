@@ -113,11 +113,26 @@ class LandingController extends Controller
             $availability[$r->date] = (int) $r->available;
         }
 
+        // Check for fully booked dates (all slots from 08:00 to 22:00 are full)
+        // Get all dates with slots that have booked >= capacity
+        $fullyBookedDates = DB::table('time_slots')
+            ->select('date')
+            ->where('service_id', $request->service_id)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->whereRaw('booked >= capacity')
+            ->whereTime('start_time', '>=', '08:00:00')
+            ->whereTime('start_time', '<', '22:00:00')
+            ->groupBy('date')
+            ->havingRaw('COUNT(*) >= 14') // 14 slots from 08:00 to 22:00
+            ->pluck('date')
+            ->toArray();
+
         return response()->json([
             'success' => true,
             'year' => (int) $year,
             'month' => (int) $month,
             'availability' => $availability,
+            'fully_booked_dates' => $fullyBookedDates,
         ]);
     }
 

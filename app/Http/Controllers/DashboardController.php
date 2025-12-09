@@ -15,11 +15,11 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
         
+        // Get all active bookings (not just 5)
         $activeBookings = Booking::where('user_id', $user->id)
             ->whereIn('status', ['pending', 'confirmed'])
-            ->with(['service', 'slot'])
+            ->with(['service', 'payment'])
             ->latest()
-            ->take(5)
             ->get();
 
         $completedCount = Booking::where('user_id', $user->id)

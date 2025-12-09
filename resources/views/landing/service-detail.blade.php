@@ -51,7 +51,7 @@
 
 @section('content')
 
-    <div x-data="serviceDetail()" @keydown.window.escape="featuresOpen = false; calendarOpen = false; timeModalOpen = false">
+    <div x-data="serviceDetail()" x-init="init()" @keydown.window.escape="featuresOpen = false; calendarOpen = false; timeModalOpen = false">
 
         <!-- Hero -->
         <section class="relative bg-gradient-to-br from-green-600 via-green-700 to-green-900 text-white overflow-hidden">
@@ -213,7 +213,7 @@
                         <div class="text-sm text-gray-600">Legenda:</div>
                         <div class="flex items-center gap-2">
                             <div class="w-4 h-4 bg-gray-300 rounded-full border"></div>
-                            <div class="text-sm text-gray-600">Penuh</div>
+                            <div class="text-sm text-gray-600">Penuh (08:00-22:00)</div>
                         </div>
                         <button @click="calendarOpen = false"
                             class="ml-4 px-3 py-2 rounded-md text-sm text-gray-600 hover:bg-gray-50">Tutup</button>
@@ -234,23 +234,17 @@
                     <div class="grid grid-cols-7 gap-2">
                         <template x-for="day in daysArray()" :key="day.dateStr">
                             <div class="h-14 flex items-center justify-center">
-                                <div class="relative">
-                                    <button
-                                        :class="{
-                                            'text-gray-400': !day.inMonth,
-                                            'text-gray-900 bg-white hover:bg-green-50': day.inMonth && !isFull(day
-                                                .dateStr),
-                                            'text-gray-500': day.inMonth && isFull(day.dateStr)
-                                        }"
-                                        class="w-10 h-10 rounded-full flex items-center justify-center transition"
-                                        x-text="day.day" @click="if(day.inMonth){ openDay(day.dateStr) }"></button>
-
-                                    <!-- overlay for full day -->
-                                    <div x-show="isFull(day.dateStr) && day.inMonth"
-                                        class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <div class="w-10 h-10 rounded-full bg-gray-300 opacity-85"></div>
-                                    </div>
-                                </div>
+                                <button
+                                    :class="{
+                                        'text-gray-400': !day.inMonth,
+                                        'text-gray-900 bg-white hover:bg-green-50': day.inMonth && !isFull(day.dateStr) && !isFullyBooked(day.dateStr),
+                                        'text-gray-500 bg-gray-300 cursor-not-allowed': day.inMonth && isFullyBooked(day.dateStr)
+                                    }"
+                                    class="w-10 h-10 rounded-full flex items-center justify-center transition"
+                                    :disabled="isFullyBooked(day.dateStr)"
+                                    x-text="day.day" 
+                                    @click="if(day.inMonth && !isFullyBooked(day.dateStr)){ openDay(day.dateStr) }">
+                                </button>
                             </div>
                         </template>
                     </div>
@@ -618,36 +612,6 @@
                         </div>
                     @endif
 
-                <!-- Success Modal -->
-                <div x-show="successModalOpen" x-cloak x-transition.opacity class="fixed inset-0 z-[80] flex items-center justify-center px-4">
-                    <div class="absolute inset-0 bg-black/70" @click="successModalOpen = false"></div>
-                    <div class="relative max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-                        <div class="p-6 text-center">
-                            <div class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-green-100 mb-4">
-                                <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
-                            <h3 class="text-xl font-bold text-gray-900" x-text="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending')) ? 'Pembayaran Menunggu' : 'Pembayaran Berhasil'"></h3>
-                            <p class="text-sm text-gray-600 mt-2" x-text="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending')) ? 'Pembayaran Anda sedang menunggu konfirmasi. Ikuti instruksi pembayaran yang diberikan.' : 'Terima kasih! Pembayaran Anda telah diterima.'"></p>
-
-                            <div class="mt-4 p-4 bg-gray-50 rounded-lg text-left">
-                                <div class="text-xs text-gray-500">Order ID</div>
-                                <div class="font-semibold text-gray-800 break-all" x-text="successInfo.order_id || '-'"></div>
-
-                                <div class="mt-3 text-xs text-gray-500">Jumlah</div>
-                                <div class="font-semibold text-gray-800">Rp <span x-text="(successInfo.amount || 0).toLocaleString('id-ID')"></span></div>
-                            </div>
-
-                            <div class="mt-6 flex gap-3">
-                                <button @click="successModalOpen = false; window.location = '/'" class="flex-1 px-4 py-2 rounded-lg border">Tutup</button>
-                                <button x-show="!(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending'))" @click="successModalOpen = false; window.location = '/booking/success/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white">Lihat Booking</button>
-                                <button x-show="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending'))" @click="successModalOpen = false; window.location = '/booking/pending/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-yellow-500 text-white">Lihat Instruksi</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                     @if (!empty($service->notes))
                         <div class="mt-4 text-sm text-gray-600">
                             <strong>Catatan:</strong>
@@ -664,6 +628,51 @@
             </div>
         </div>
 
+        <!-- Success Modal -->
+        <div x-show="successModalOpen" x-cloak x-transition.opacity class="fixed inset-0 z-[80] flex items-center justify-center px-4">
+            <div class="absolute inset-0 bg-black/70" @click="successModalOpen = false"></div>
+            <div class="relative max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+                <div class="p-6 text-center">
+                    <div class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-green-100 mb-4">
+                        <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900" x-text="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending')) ? 'Pembayaran Menunggu' : 'Pembayaran Berhasil'"></h3>
+                    <p class="text-sm text-gray-600 mt-2" x-text="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending')) ? 'Pembayaran Anda sedang menunggu konfirmasi. Ikuti instruksi pembayaran yang diberikan.' : 'Terima kasih! Pembayaran Anda telah diterima.'"></p>
+
+                    <div class="mt-4 p-4 bg-gray-50 rounded-lg text-left">
+                        <div class="text-xs text-gray-500">Order ID</div>
+                        <div class="font-semibold text-gray-800 break-all" x-text="successInfo.order_id || '-'"></div>
+
+                        <div class="mt-3 text-xs text-gray-500">Jumlah</div>
+                        <div class="font-semibold text-gray-800">Rp <span x-text="(successInfo.amount || 0).toLocaleString('id-ID')"></span></div>
+                    </div>
+
+                    <div class="mt-6 flex gap-3">
+                        <button @click="successModalOpen = false; window.location = '/'" class="flex-1 px-4 py-2 rounded-lg border">Tutup</button>
+                        <button x-show="!(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending'))" @click="successModalOpen = false; window.location = '/booking/success/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white">Lihat Booking</button>
+                        <button x-show="(successInfo.status === 'pending' || (successInfo.raw && successInfo.raw.transaction_status === 'pending'))" @click="successModalOpen = false; window.location = '/booking/pending/' + (successInfo.order_id || '')" class="flex-1 px-4 py-2 rounded-lg bg-yellow-500 text-white">Lihat Instruksi</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+            <!-- Login Modal (prompt user to login before proceeding) -->
+            <div x-show="loginModalOpen" x-cloak x-transition.opacity class="fixed inset-0 z-[85] flex items-center justify-center px-4">
+                <div class="absolute inset-0 bg-black/60" @click="loginModalOpen = false; confirmModalOpen = true"></div>
+                <div class="relative max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+                    <div class="p-6 text-center">
+                        <h3 class="text-lg font-bold mb-2">Silakan Login</h3>
+                        <p class="text-sm text-gray-600 mb-4">Anda harus masuk untuk melanjutkan booking.</p>
+                        <div class="flex gap-3">
+                            <button @click="loginModalOpen = false; confirmModalOpen = true" class="flex-1 px-4 py-2 rounded-lg border">Batal</button>
+                            <button @click="goToLoginWithRedirect()" class="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white">Login</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
     </div>
 
 @endsection
@@ -678,6 +687,9 @@
                 confirmModalOpen: false,
                 paymentModalOpen: false,
                 availability: {},
+                fullyBookedDates: [],
+                loginModalOpen: false,
+                isAuthenticated: {{ auth()->check() ? 'true' : 'false' }},
                 currentYear: new Date().getFullYear(),
                 currentMonth: new Date().getMonth() + 1,
                 serviceId: {{ (int) $service->id }},
@@ -688,6 +700,7 @@
                 // Success modal state
                 successModalOpen: false,
                 successInfo: {},
+                pendingBooking: null,
 
                 async loadMonth(year = this.currentYear, month = this.currentMonth) {
                     this.loadingMonth = true;
@@ -709,6 +722,7 @@
                             this.currentYear = data.year;
                             this.currentMonth = data.month;
                             this.availability = data.availability || {};
+                            this.fullyBookedDates = data.fully_booked_dates || [];
                         }
                     } catch (e) {
                         console.error(e);
@@ -768,6 +782,10 @@
                         dateStr] === 0;
                 },
 
+                isFullyBooked(dateStr) {
+                    return this.fullyBookedDates.includes(dateStr);
+                },
+
                 openCalendar() {
                     this.calendarOpen = true;
                     this.loadMonth();
@@ -781,19 +799,52 @@
                 endTime: null,
                 
                 get bookedRanges() {
-                    // Return each booked slot as its own range (do not merge contiguous hours)
+                    // Merge contiguous booked hours into ranges
                     const ranges = [];
                     const sortedKeys = Object.keys(this.daySlots).sort();
-
-                    for (const key of sortedKeys) {
+                    
+                    let rangeStart = null;
+                    let rangeEnd = null;
+                    
+                    for (let i = 0; i < sortedKeys.length; i++) {
+                        const key = sortedKeys[i];
                         const slot = this.daySlots[key];
+                        
                         if (slot.is_full || slot.booked > 0) {
                             const hour = parseInt(key.split(':')[0]);
-                            const end = String(hour + 1).padStart(2, '0') + ':00';
-                            ranges.push(key + ' - ' + end);
+                            
+                            if (rangeStart === null) {
+                                // Start new range
+                                rangeStart = key;
+                                rangeEnd = String(hour + 1).padStart(2, '0') + ':00';
+                            } else {
+                                // Check if this slot is contiguous with previous
+                                const prevEndHour = parseInt(rangeEnd.split(':')[0]);
+                                if (hour === prevEndHour) {
+                                    // Extend current range
+                                    rangeEnd = String(hour + 1).padStart(2, '0') + ':00';
+                                } else {
+                                    // Gap found, save previous range and start new one
+                                    ranges.push(rangeStart + ' - ' + rangeEnd);
+                                    rangeStart = key;
+                                    rangeEnd = String(hour + 1).padStart(2, '0') + ':00';
+                                }
+                            }
+                        } else {
+                            // Not booked, close current range if exists
+                            if (rangeStart !== null) {
+                                ranges.push(rangeStart + ' - ' + rangeEnd);
+                                rangeStart = null;
+                                rangeEnd = null;
+                            }
                         }
                     }
-
+                    
+                    // Don't forget to add the last range if exists
+                    if (rangeStart !== null) {
+                        ranges.push(rangeStart + ' - ' + rangeEnd);
+                    }
+                    
                     return ranges;
                 },
 
@@ -860,9 +911,65 @@
                 },
 
                 proceedToBooking() {
+                    // If user is not authenticated, prompt login first
+                    if (!this.isAuthenticated) {
+                        this.confirmModalOpen = false;
+                        // store current selection so we can redirect back with params
+                        this.pendingBooking = {
+                            date: this.selectedDate,
+                            start: this.startTime,
+                            end: this.endTime
+                        };
+                        this.loginModalOpen = true;
+                        return;
+                    }
+
                     // Open payment modal instead of redirecting
                     this.confirmModalOpen = false;
                     this.paymentModalOpen = true;
+                },
+
+                goToLoginWithRedirect() {
+                    // Build redirect URL including pending booking params (if available)
+                    let date = this.pendingBooking ? this.pendingBooking.date : this.selectedDate;
+                    let start = this.pendingBooking ? this.pendingBooking.start : this.startTime;
+                    let end = this.pendingBooking ? this.pendingBooking.end : this.endTime;
+
+                    const params = new URLSearchParams();
+                    params.set('after', 'confirm');
+                    if (date) params.set('date', date);
+                    if (start) params.set('start', start);
+                    if (end) params.set('end', end);
+
+                    const redirect = window.location.pathname + '?' + params.toString();
+                    window.location = '/login?redirect=' + encodeURIComponent(redirect);
+                },
+
+                init() {
+                    // Run on page load. If user returned from login with params, open confirm modal.
+                    try {
+                        const params = new URLSearchParams(window.location.search);
+                        if (this.isAuthenticated && params.get('after') === 'confirm' && params.get('date')) {
+                            const date = params.get('date');
+                            const start = params.get('start');
+                            const end = params.get('end');
+
+                            (async () => {
+                                // Load day slots first
+                                await this.openDay(date);
+                                // Set selected times if provided
+                                if (start) this.startTime = start;
+                                if (end) this.endTime = end;
+                                // Close time modal (openDay opens time modal) and open confirm modal
+                                this.timeModalOpen = false;
+                                this.confirmModalOpen = true;
+                                // remove query params so modal doesn't reopen on refresh
+                                try { history.replaceState({}, '', window.location.pathname + window.location.hash); } catch(e){}
+                            })();
+                        }
+                    } catch (e) {
+                        console.error('init error', e);
+                    }
                 },
 
                 async processPayment() {
@@ -901,33 +1008,33 @@
                                 const self = this;
                                 window.snap.pay(result.snap_token, {
                                     onSuccess: async (res) => {
-                                        try {
-                                            console.log('Snap onSuccess callback', res);
+                                        console.log('Snap onSuccess callback', res);
 
-                                            // Try confirm payment on backend using booking_id returned from createBooking
-                                            const bookingId = result.booking_id || (res.order_id ? res.order_id.replace(/[^0-9]/g, '') : null);
-                                            if (bookingId) {
-                                                try {
-                                                    const notifyRes = await fetch('/api/bookings/' + bookingId + '/confirm-payment', {
-                                                        method: 'POST',
-                                                        headers: {
-                                                            'Content-Type': 'application/json',
-                                                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                                                        },
-                                                        body: JSON.stringify({
-                                                            transaction_id: res.transaction_id || res.transaction_id || null,
-                                                            raw: res
-                                                        })
-                                                    });
-                                                    const notifyData = await notifyRes.json();
-                                                    console.log('Backend confirm payment response', notifyData);
-                                                } catch (notifyErr) {
-                                                    console.error('Failed to notify backend about payment success', notifyErr);
-                                                }
+                                        // Try confirm payment on backend using booking_id returned from createBooking
+                                        const bookingId = result.booking_id || (res.order_id ? res.order_id.replace(/[^0-9]/g, '') : null);
+                                        if (bookingId) {
+                                            try {
+                                                const notifyRes = await fetch('/api/bookings/' + bookingId + '/confirm-payment', {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                                                    },
+                                                    body: JSON.stringify({
+                                                        transaction_id: res.transaction_id || res.transaction_id || null,
+                                                        raw: res
+                                                    })
+                                                });
+                                                const notifyData = await notifyRes.json();
+                                                console.log('Backend confirm payment response', notifyData);
+                                            } catch (notifyErr) {
+                                                console.error('Failed to notify backend about payment success', notifyErr);
                                             }
+                                        }
 
-                                            // Show modal using self reference
-                                            console.log('About to show success modal');
+                                        // Wait for Midtrans popup to fully close, then show success modal
+                                        setTimeout(() => {
+                                            console.log('Showing success modal after Midtrans closed');
                                             self.paymentModalOpen = false;
                                             self.successInfo = {
                                                 order_id: res.order_id || res.transaction_id || result.order_id || result.booking_id,
@@ -936,15 +1043,15 @@
                                                 status: 'success'
                                             };
                                             self.successModalOpen = true;
-                                            console.log('Success modal opened:', self.successModalOpen);
-                                        } catch (e) {
-                                            console.error('Failed to handle onSuccess:', e);
-                                        }
+                                            self.paymentLoading = false;
+                                        }, 500);
                                     },
                                     onPending: (res) => {
-                                        // Open modal in pending state instead of redirecting
-                                        try {
-                                            console.log('Snap onPending callback', res);
+                                        console.log('Snap onPending callback', res);
+                                        
+                                        // Wait for Midtrans popup to fully close, then show pending modal
+                                        setTimeout(() => {
+                                            console.log('Showing pending modal after Midtrans closed');
                                             self.paymentModalOpen = false;
                                             self.successInfo = {
                                                 order_id: res.order_id || result.order_id || result.booking_id,
@@ -953,32 +1060,21 @@
                                                 status: 'pending'
                                             };
                                             self.successModalOpen = true;
-                                        } catch (e) {
-                                            console.error('Failed to open pending modal via self:', e);
-                                            try {
-                                                const root = document.querySelector('[x-data]');
-                                                if (root && root.__x) {
-                                                    root.__x.$data.successInfo = {
-                                                        order_id: res.order_id || result.order_id || result.booking_id,
-                                                        amount: (root.__x.$data && root.__x.$data.calculateTotal) ? root.__x.$data.calculateTotal() : 0,
-                                                        raw: res,
-                                                        status: 'pending'
-                                                    };
-                                                    root.__x.$data.successModalOpen = true;
-                                                }
-                                            } catch (e2) {
-                                                console.error('Failed to open pending modal via DOM fallback:', e2);
-                                            }
-                                        }
+                                            self.paymentLoading = false;
+                                        }, 500);
                                     },
                                     onError: (res) => {
-                                        alert('Pembayaran gagal. Silakan coba lagi.');
-                                        console.error(res);
-                                        self.paymentLoading = false;
+                                        console.error('Payment error:', res);
+                                        setTimeout(() => {
+                                            alert('Pembayaran gagal. Silakan coba lagi.');
+                                            self.paymentLoading = false;
+                                        }, 500);
                                     },
                                     onClose: () => {
-                                        console.log('Payment popup closed');
-                                        self.paymentLoading = false;
+                                        console.log('Payment popup closed by user');
+                                        setTimeout(() => {
+                                            self.paymentLoading = false;
+                                        }, 500);
                                     }
                                 });
                             } else if (result.use_manual_payment) {
